@@ -1,0 +1,64 @@
+name: Build AIVON APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Unzip AIVON.zip (agar repo mein zip upload kiya hai)
+        run: |
+          for z in AIVON*.zip; do
+            [ -f "$z" ] && unzip -q -o "$z" -d _src
+          done || true
+
+      - name: Find project folder
+        id: proj
+        run: |
+          f=$(find . -maxdepth 4 -name settings.gradle.kts | head -n 1)
+          if [ -z "$f" ]; then
+            echo "settings.gradle.kts nahi mila"
+            exit 1
+          fi
+          echo "dir=$(dirname "$f")" >> "$GITHUB_OUTPUT"
+
+      - name: Accept SDK licenses and install platform 34
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --console=plain \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" \
+            -Dkotlin.daemon.jvm.options="-Xmx2g" 2>&1 | tee build.log
+
+      - name: Show error (sirf fail hone par)
+        if: failure()
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: |
+          grep -n -E "^e: |What went wrong|Execution failed|Could not|OutOfMemory|FAILED" build.log | head -40 || true
+          grep -n -A 12 "What went wrong" build.log | head -60 || true
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: AIVON-debug-apk
+          path: "**/build/outputs/apk/debug/app-debug.apk"
