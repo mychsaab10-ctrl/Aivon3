@@ -33,10 +33,11 @@ jobs:
           fi
           echo "dir=$(dirname "$f")" >> "$GITHUB_OUTPUT"
 
-      - name: Accept SDK licenses and install platform 34
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform 34
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
